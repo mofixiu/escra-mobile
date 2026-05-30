@@ -421,7 +421,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         child: const Column(
           children: [
             Icon(Icons.cloud_upload_outlined, size: 36, color: Colors.black54),
-            const SizedBox(height: 12),
+            SizedBox(height: 12),
             Text(
               'Attach Corporate Filing File',
               style: TextStyle(
@@ -430,7 +430,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
                 color: Colors.black,
               ),
             ),
-            const SizedBox(height: 4),
+            SizedBox(height: 4),
             Text(
               'Select PDF, PNG or JPG (Max 15MB)',
               style: TextStyle(

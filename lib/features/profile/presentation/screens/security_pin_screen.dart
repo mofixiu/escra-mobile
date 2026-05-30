@@ -293,7 +293,7 @@ class _SecurityPinScreenState extends State<SecurityPinScreen> {
         ),
         Switch.adaptive(
           value: value,
-          activeColor: Colors.black,
+          activeThumbColor: Colors.black,
           activeTrackColor: Colors.black26,
           inactiveThumbColor: Colors.white,
           inactiveTrackColor: Colors.grey.shade300,

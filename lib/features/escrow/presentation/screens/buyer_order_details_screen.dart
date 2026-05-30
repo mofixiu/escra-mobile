@@ -574,6 +574,7 @@ class BuyerOrderDetailsScreen extends StatelessWidget {
                       color: isCompleted || isCurrent ? Colors.black87 : Colors.black45,
                     ),
                   ),
+                  // ignore: use_null_aware_elements
                   if (badge != null) badge,
                   if (description != null) ...[
                     const SizedBox(height: 8),

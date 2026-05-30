@@ -77,7 +77,7 @@ class StoreAnalyticsScreen extends StatelessWidget {
                       letterSpacing: 1.0,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: 8),
                   Text(
                     '₦14,204,500.00',
                     style: TextStyle(
@@ -87,7 +87,7 @@ class StoreAnalyticsScreen extends StatelessWidget {
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     children: [
                       Icon(Icons.trending_up_rounded, color: Colors.green, size: 16),
@@ -172,7 +172,7 @@ class StoreAnalyticsScreen extends StatelessWidget {
                   const SizedBox(height: 36),
 
                   // The Bars Row
-                  Container(
+                  SizedBox(
                     height: 160,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
