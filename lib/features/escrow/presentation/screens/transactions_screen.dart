@@ -5,6 +5,7 @@ import '../../data/models/order_model.dart';
 import '../../domain/controllers/escrow_controller.dart';
 import 'buyer_order_details_screen.dart';
 import '../../../auth/domain/auth_controller.dart';
+import '../../../../core/utils/escra_router.dart';
 
 class TransactionsScreen extends StatelessWidget {
   const TransactionsScreen({super.key});
@@ -24,10 +25,20 @@ class TransactionsScreen extends StatelessWidget {
           'Transactions',
           style: TextStyle(
             color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            fontSize: 22,
+            letterSpacing: -0.5,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 24),
+            child: Image.asset(
+              'assets/logos/escralogonobackground.png',
+              height: 20,
+            ),
+          ),
+        ],
       ),
       body: ListenableBuilder(
         listenable: escrowCtrl,
@@ -103,11 +114,48 @@ class TransactionsScreen extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator(color: Colors.black)),
                 )
               else if (escrowCtrl.orders.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Center(
-                    child: Text(
-                      'No transactions found',
-                      style: TextStyle(color: Colors.black54),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.receipt_long_outlined,
+                              size: 40,
+                              color: Colors.black38,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'No Transactions Found',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'All your active secure escrow orders and payments will be displayed here in detail.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black45,
+                              height: 1.4,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 )
@@ -125,9 +173,9 @@ class TransactionsScreen extends StatelessWidget {
                           isBuyer: isMyBuyerOrder,
                           onTap: () {
                             if (isMyBuyerOrder) {
-                              Navigator.push(
+                              EscraRouter.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => BuyerOrderDetailsScreen(order: order)),
+                                BuyerOrderDetailsScreen(order: order),
                               ).then((_) => escrowCtrl.fetchOrders());
                             } else {
                               // ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seller details coming soon')));

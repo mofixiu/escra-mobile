@@ -10,6 +10,7 @@ import 'features/auth/domain/auth_controller.dart';
 import 'features/auth/presentation/screens/auth_screen.dart';
 import 'features/escrow/presentation/screens/order_list_screen.dart';
 import 'features/escrow/presentation/screens/transactions_screen.dart';
+import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/wallet/presentation/screens/wallet_screen.dart';
 
 void main() {
@@ -117,28 +118,22 @@ class _SplashScreenState extends State<_SplashScreen>
       backgroundColor: AppColors.background,
       body: FadeTransition(
         opacity: _fade,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.verified_user_outlined, size: 56, color: Colors.white),
-              SizedBox(height: 20),
-              Text(
-                'ESCRA',
-                style: TextStyle(
-                  fontSize: 40,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -2.0,
-                  color: Colors.white,
-                ),
+              Image.asset(
+                'assets/logos/escralogonobackground.png',
+                height: 48,
               ),
-              SizedBox(height: 8),
-              Text(
+              const SizedBox(height: 24),
+              const Text(
                 'Authenticating identity…',
                 style: TextStyle(
                   fontSize: 13,
                   color: AppColors.secondary,
                   letterSpacing: 0.2,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -164,7 +159,7 @@ class _AppShellState extends State<_AppShell> {
     OrderListScreen(), // Dashboard
     TransactionsScreen(), // Orders/Transactions
     WalletScreen(),
-    _ProfileScreen(),
+    ProfileScreen(),
   ];
 
   @override
@@ -273,232 +268,6 @@ class _NavItem {
   const _NavItem({required this.icon, required this.activeIcon, required this.label});
 }
 
-/// Profile / Account screen showing user details, role, and logout.
-class _ProfileScreen extends StatelessWidget {
-  const _ProfileScreen();
 
-  @override
-  Widget build(BuildContext context) {
-    final authCtrl = GetIt.I<AuthController>();
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F7F7),
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'Account',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-      ),
-      body: ListenableBuilder(
-        listenable: authCtrl,
-        builder: (context, _) {
-          final user = authCtrl.currentUser;
-          if (user == null) return const SizedBox();
-
-          return ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              // Avatar + name
-              Center(
-                child: Column(
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black12, width: 2),
-                        color: Colors.white,
-                      ),
-                      child: Center(
-                        child: Text(
-                          user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      user.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      user.email,
-                      style: const TextStyle(color: Colors.black54, fontSize: 13),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        user.role.name.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 40),
-
-              // Info tiles
-              _InfoTile(label: 'User ID', value: user.id),
-              _InfoTile(label: 'Platform Role', value: user.role.name.toUpperCase()),
-              _InfoTile(label: 'Wallet Balance', value: _fmt(user.balanceKobo)),
-              const SizedBox(height: 32),
-
-              // Sign out
-              ElevatedButton.icon(
-                onPressed: () async {
-                  await authCtrl.logout();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.red,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.red.withValues(alpha: 0.5)),
-                  ),
-                ),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: const Text(
-                  'SIGN OUT',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Architecture callout
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.black12),
-                  color: Colors.white,
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ARCHITECTURE',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.black54,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    _ArchRow(label: 'DI', value: 'GetIt Service Locator'),
-                    _ArchRow(label: 'HTTP', value: 'Dio + Auth & Idempotency Interceptors'),
-                    _ArchRow(label: 'Storage', value: 'FlutterSecureStorage (Keychain)'),
-                    _ArchRow(label: 'Money', value: 'Integer Kobo — no floats in domain'),
-                    _ArchRow(label: 'Auth', value: 'JWT Bearer + 3-strike lockout'),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  String _fmt(int kobo) {
-    final double naira = kobo / 100.0;
-    return '₦${naira.toStringAsFixed(2).replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'),
-      (m) => ',',
-    )}';
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final String label;
-  final String value;
-  const _InfoTile({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Colors.black54, fontSize: 13)),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ArchRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _ArchRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 60,
-            child: Text(
-               label,
-               style: const TextStyle(
-                 color: Colors.black87,
-                 fontSize: 11,
-                 fontWeight: FontWeight.w700,
-               ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.black54, fontSize: 11),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 

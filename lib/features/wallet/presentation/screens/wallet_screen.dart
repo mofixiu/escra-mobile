@@ -258,15 +258,25 @@ class _WalletScreenState extends State<WalletScreen> {
           appBar: AppBar(
             backgroundColor: const Color(0xFFF7F7F7),
             elevation: 0,
-            centerTitle: true,
+            centerTitle: false,
             title: const Text(
-              'Wallet Balance',
+              'Wallet',
               style: TextStyle(
                 color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                fontSize: 22,
+                letterSpacing: -0.5,
               ),
             ),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 24),
+                child: Image.asset(
+                  'assets/logos/escralogonobackground.png',
+                  height: 20,
+                ),
+              ),
+            ],
           ),
           body: RefreshIndicator(
             onRefresh: _fetchHistory,
@@ -279,11 +289,19 @@ class _WalletScreenState extends State<WalletScreen> {
                 Container(
                   padding: const EdgeInsets.all(32),
                   decoration: BoxDecoration(
-                    color: Colors.black,
                     borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2C3E50), Color(0xFF000000)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      width: 1.5,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
+                        color: Colors.black.withValues(alpha: 0.15),
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       ),

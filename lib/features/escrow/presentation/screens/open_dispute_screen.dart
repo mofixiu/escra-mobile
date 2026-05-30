@@ -4,6 +4,7 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/order_model.dart';
 import '../../domain/controllers/escrow_controller.dart';
 import 'buyer_order_details_screen.dart';
+import '../../../../core/utils/escra_router.dart';
 import '../../../auth/domain/auth_controller.dart';
 import '../../../auth/data/models/user_model.dart';
 
@@ -34,9 +35,9 @@ class _OpenDisputeScreenState extends State<OpenDisputeScreen> {
     if (!mounted) return;
 
     Navigator.popUntil(context, (route) => route.isFirst);
-    Navigator.push(
+    EscraRouter.push(
       context,
-      MaterialPageRoute(builder: (_) => BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.disputed))),
+      BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.disputed)),
     );
   }
 
