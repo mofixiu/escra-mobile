@@ -6,6 +6,7 @@ import 'account_settings_screen.dart';
 import 'security_pin_screen.dart';
 import 'payment_methods_screen.dart';
 import '../../../../core/utils/escra_router.dart';
+import 'contact_support_screen.dart';
 
 /// High-fidelity Buyer Profile Screen matching the original designs.
 class BuyerProfileScreen extends StatelessWidget {
@@ -239,7 +240,9 @@ class BuyerProfileScreen extends StatelessWidget {
             _buildTileItem(
               icon: Icons.support_agent_rounded,
               title: 'Support',
-              onTap: () {},
+              onTap: () {
+                EscraRouter.push(context, const ContactSupportScreen());
+              },
             ),
             _buildTileItem(
               icon: Icons.help_outline_rounded,

@@ -492,7 +492,7 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
               const SizedBox(height: 24),
 
               DropdownButtonFormField<String>(
-                value: _selectedBank,
+                initialValue: _selectedBank,
                 dropdownColor: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 menuMaxHeight: 300,

@@ -285,7 +285,7 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
         ),
         Switch.adaptive(
           value: value,
-          activeColor: Colors.black,
+          activeThumbColor: Colors.black,
           activeTrackColor: Colors.black26,
           inactiveThumbColor: Colors.white,
           inactiveTrackColor: Colors.grey.shade300,

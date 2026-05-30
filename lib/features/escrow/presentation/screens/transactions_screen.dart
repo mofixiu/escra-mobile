@@ -6,6 +6,7 @@ import '../../domain/controllers/escrow_controller.dart';
 import 'buyer_order_details_screen.dart';
 import '../../../auth/domain/auth_controller.dart';
 import '../../../../core/utils/escra_router.dart';
+import '../../../profile/presentation/screens/contact_support_screen.dart';
 
 class TransactionsScreen extends StatelessWidget {
   const TransactionsScreen({super.key});
@@ -240,35 +241,41 @@ class TransactionsScreen extends StatelessWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.support_agent, size: 32, color: Colors.black),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Need help with an order?',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
+                  child: InkWell(
+                    onTap: () {
+                      EscraRouter.push(context, const ContactSupportScreen());
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.support_agent, size: 32, color: Colors.black),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Need help with an order?',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Contact Support',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                            decoration: TextDecoration.underline,
+                          const SizedBox(height: 4),
+                          Text(
+                            'Contact Support',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                              decoration: TextDecoration.underline,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -9,6 +9,7 @@ import 'verification_status_screen.dart';
 import '../../../../core/utils/escra_router.dart';
 import 'security_pin_screen.dart';
 import 'store_analytics_screen.dart';
+import 'contact_support_screen.dart';
 
 /// High-fidelity Seller Profile Screen matching the original designs.
 class SellerProfileScreen extends StatefulWidget {
@@ -247,7 +248,9 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
             _buildTileItem(
               icon: Icons.help_outline_rounded,
               title: 'Support',
-              onTap: () {},
+              onTap: () {
+                EscraRouter.push(context, const ContactSupportScreen());
+              },
             ),
             _buildTileItem(
               icon: Icons.description_outlined,
