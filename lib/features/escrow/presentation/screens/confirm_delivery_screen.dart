@@ -6,7 +6,9 @@ import '../../domain/controllers/escrow_controller.dart';
 import '../../../shared/widgets/custom_pin_pad.dart';
 import 'buyer_order_details_screen.dart';
 import '../../../auth/domain/auth_controller.dart';
+import '../../../shared/widgets/high_contrast_button.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../../core/utils/escra_router.dart';
 
 class ConfirmDeliveryScreen extends StatefulWidget {
   final OrderModel order;
@@ -33,9 +35,9 @@ class _ConfirmDeliveryScreenState extends State<ConfirmDeliveryScreen> {
     if (!mounted) return;
 
     Navigator.popUntil(context, (route) => route.isFirst);
-    Navigator.push(
+    EscraRouter.push(
       context,
-      MaterialPageRoute(builder: (_) => BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.completed))),
+      BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.completed)),
     );
   }
 
@@ -53,8 +55,8 @@ class _ConfirmDeliveryScreenState extends State<ConfirmDeliveryScreen> {
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.menu, color: Colors.black),
-          onPressed: () {},
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black, size: 20),
+          onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'ESCRA',
@@ -205,44 +207,21 @@ class _ConfirmDeliveryScreenState extends State<ConfirmDeliveryScreen> {
 
                     const SizedBox(height: 32),
 
-                    ElevatedButton.icon(
-                      onPressed: canBuyerAct && isCodeValid ? _submitConfirmation : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: canBuyerAct && isCodeValid ? Colors.black : Colors.black12,
-                        foregroundColor: canBuyerAct && isCodeValid ? Colors.white : Colors.black38,
-                        minimumSize: const Size(double.infinity, 56),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      icon: const Icon(Icons.lock_open_rounded, size: 18),
-                      label: const Text(
-                        'Confirm Delivery & Release\nFunds',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (canBuyerAct)
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context); // Goes back to order details where Open Dispute is available
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black,
-                          minimumSize: const Size(double.infinity, 56),
-                          side: const BorderSide(color: Colors.black),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                        icon: const Icon(Icons.gavel_outlined, size: 18),
-                        label: const Text(
-                          'Open Dispute',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                     HighContrastButton(
+                       text: 'CONFIRM DELIVERY & RELEASE FUNDS',
+                       icon: Icons.lock_open_rounded,
+                       onPressed: canBuyerAct && isCodeValid ? _submitConfirmation : null,
+                     ),
+                     const SizedBox(height: 16),
+                     if (canBuyerAct)
+                       HighContrastButton(
+                         text: 'OPEN DISPUTE',
+                         icon: Icons.gavel_outlined,
+                         isPrimary: false,
+                         onPressed: () {
+                           Navigator.pop(context);
+                         },
+                       ),
 
                     const SizedBox(height: 32),
                     const Text(

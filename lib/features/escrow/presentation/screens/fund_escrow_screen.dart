@@ -6,6 +6,7 @@ import '../../domain/controllers/escrow_controller.dart';
 import '../../../auth/domain/auth_controller.dart';
 import '../../../shared/widgets/custom_pin_pad.dart';
 import 'order_detail_screen.dart';
+import '../../../../core/utils/escra_router.dart';
 
 class FundEscrowScreen extends StatefulWidget {
   final OrderModel order;
@@ -34,9 +35,9 @@ class _FundEscrowScreenState extends State<FundEscrowScreen> {
     
     // Navigate back to dashboard and refresh, or show success
     Navigator.popUntil(context, (route) => route.isFirst);
-    Navigator.push(
+    EscraRouter.push(
       context,
-      MaterialPageRoute(builder: (_) => OrderDetailScreen(order: widget.order.copyWith(status: EscrowStatus.funded))),
+      OrderDetailScreen(order: widget.order.copyWith(status: EscrowStatus.funded)),
     );
   }
 

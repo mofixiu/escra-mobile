@@ -4,6 +4,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/high_contrast_button.dart';
 import '../../data/models/user_model.dart';
 import '../../domain/auth_controller.dart';
+import '../../../../core/utils/escra_router.dart';
+import 'seller_onboarding_screen.dart';
 
 /// Clean high-contrast sign in / signup screen.
 class AuthScreen extends StatefulWidget {
@@ -61,6 +63,20 @@ class _AuthScreenState extends State<AuthScreen> {
 
     if (_isSignUp) {
       final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'.trim();
+      
+      if (_selectedRole == UserRole.seller) {
+        EscraRouter.push(
+          context,
+          SellerOnboardingScreen(
+            fullName: fullName,
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+            onAuthSuccess: widget.onAuthSuccess,
+          ),
+        );
+        return;
+      }
+      
       success = await authCtrl.signUp(
         fullName,
         _emailController.text.trim(),
@@ -114,31 +130,14 @@ class _AuthScreenState extends State<AuthScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Futuristic Premium Shield Icon
+                        // Branded Escra Logo
                         Center(
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.black12, width: 1.5),
-                              color: Colors.white,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Image.asset(
+                              'assets/logos/escralogonobackground.png',
+                              height: 56,
                             ),
-                            child: const Icon(
-                              Icons.verified_user_outlined,
-                              size: 48,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'ESCRA',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -1.5,
-                            color: Colors.black,
                           ),
                         ),
                         const SizedBox(height: 6),

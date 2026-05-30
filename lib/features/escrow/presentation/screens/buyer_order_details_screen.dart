@@ -6,6 +6,7 @@ import 'confirm_delivery_screen.dart';
 import 'open_dispute_screen.dart';
 import '../../../auth/domain/auth_controller.dart';
 import '../../../auth/data/models/user_model.dart';
+import '../../../../core/utils/escra_router.dart';
 
 class BuyerOrderDetailsScreen extends StatelessWidget {
   final OrderModel order;
@@ -433,9 +434,9 @@ class BuyerOrderDetailsScreen extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.push(
+                          EscraRouter.push(
                             context,
-                            MaterialPageRoute(builder: (_) => OpenDisputeScreen(order: order)),
+                            OpenDisputeScreen(order: order),
                           );
                         },
                         style: ElevatedButton.styleFrom(
@@ -458,9 +459,9 @@ class BuyerOrderDetailsScreen extends StatelessWidget {
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          Navigator.push(
+                          EscraRouter.push(
                             context,
-                            MaterialPageRoute(builder: (_) => ConfirmDeliveryScreen(order: order)),
+                            ConfirmDeliveryScreen(order: order),
                           );
                         },
                         style: ElevatedButton.styleFrom(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../data/models/order_model.dart';
 import 'fund_escrow_screen.dart';
+import '../../../../core/utils/escra_router.dart';
 
 class OrderSummaryScreen extends StatelessWidget {
   final OrderModel order;
@@ -205,9 +206,9 @@ class OrderSummaryScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: ElevatedButton(
             onPressed: () {
-              Navigator.push(
+              EscraRouter.push(
                 context,
-                MaterialPageRoute(builder: (_) => FundEscrowScreen(order: order)),
+                FundEscrowScreen(order: order),
               );
             },
             style: ElevatedButton.styleFrom(
