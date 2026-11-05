@@ -17,6 +17,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
+  final _buyerCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   String _currency = 'NGN';
@@ -29,6 +30,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
     _titleCtrl.dispose();
     _descCtrl.dispose();
     _amountCtrl.dispose();
+    _buyerCtrl.dispose();
     super.dispose();
   }
 
@@ -97,6 +99,27 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                     maxLines: 3,
                     decoration: _inputDecoration('Provide clear details about the item or service...'),
                     validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 20),
+
+                  // BUYER IDENTIFIER (EMAIL OR PHONE)
+                  _buildLabel('BUYER IDENTIFIER (EMAIL OR PHONE)'),
+                  TextFormField(
+                    controller: _buyerCtrl,
+                    style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w700),
+                    decoration: _inputDecoration('buyer@example.com or phone number'),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      final val = v.trim();
+                      if (val.contains('@')) {
+                        if (!val.contains('.') || val.length < 5) return 'Invalid email address';
+                      } else {
+                        if (!RegExp(r'^[0-9+\-\s]+$').hasMatch(val)) {
+                          return 'Enter a valid email or phone number';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 20),
 
@@ -265,12 +288,39 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                               final kobo = CurrencyFormatter.nairaToKobo(
                                 double.parse(_amountCtrl.text),
                               );
+
+                              String? mappedDeliveryMode;
+                              if (_deliveryMode == 'Digital Delivery') {
+                                mappedDeliveryMode = 'DIGITAL';
+                              } else if (_deliveryMode == 'Physical Shipping') {
+                                mappedDeliveryMode = 'PHYSICAL';
+                              } else if (_deliveryMode == 'In-Person Meetup') {
+                                mappedDeliveryMode = 'PHYSICAL';
+                              }
+
+                              String? mappedSalesChannel;
+                              if (_salesChannel == 'Twitter/X') {
+                                mappedSalesChannel = 'OTHER';
+                              } else if (_salesChannel == 'Instagram') {
+                                mappedSalesChannel = 'INSTAGRAM';
+                              } else if (_salesChannel == 'Facebook') {
+                                mappedSalesChannel = 'OTHER';
+                              } else if (_salesChannel == 'WhatsApp') {
+                                mappedSalesChannel = 'WHATSAPP';
+                              } else if (_salesChannel == 'Other') {
+                                mappedSalesChannel = 'OTHER';
+                              }
+
+                              debugPrint('[CreateOrderScreen] Initiating createAgreement. Title: ${_titleCtrl.text.trim()}, Amount (Kobo): $kobo, Description: ${_descCtrl.text.trim()}, Buyer: ${_buyerCtrl.text.trim()}, Delivery: $mappedDeliveryMode, Channel: $mappedSalesChannel');
                               final ok = await _escrowCtrl.createAgreement(
                                 title: _titleCtrl.text.trim(),
                                 amountKobo: kobo,
-                                sellerEmail: 'seller@escra.com',
+                                sellerEmail: _buyerCtrl.text.trim(),
                                 description: _descCtrl.text.trim(),
+                                salesChannel: mappedSalesChannel,
+                                deliveryMode: mappedDeliveryMode,
                               );
+                              debugPrint('[CreateOrderScreen] createAgreement completed. success: $ok, Error: ${_escrowCtrl.errorMessage}');
                               if (ok && context.mounted) Navigator.pop(context);
                             }
                           : null,

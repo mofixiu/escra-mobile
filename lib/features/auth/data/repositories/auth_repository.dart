@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../../core/secure_storage/secure_storage_service.dart';
 import '../models/user_model.dart';
@@ -6,10 +7,18 @@ import '../models/user_model.dart';
 /// Clean Architecture Authentication contract.
 abstract class AuthRepository {
   /// authenticates credentials with backend API
-  Future<UserModel> login(String email, String password);
+  Future<UserModel> login(String phone, String password);
 
   /// Registers a brand new user session with specific Buyer/Seller roles
-  Future<UserModel> signUp(String name, String email, String password, UserRole role);
+  Future<UserModel> signUp({
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String password,
+    required String pin,
+    String? email,
+    required UserRole role,
+  });
 
   /// Performs secure signouts and cleans cache layers
   Future<void> logout();
@@ -19,59 +28,127 @@ abstract class AuthRepository {
 
   /// Updates the cached user data
   Future<void> updateCachedUser(UserModel user);
+
+  /// Fetches latest user profile from server
+  Future<Map<String, dynamic>> getProfile();
+
+  /// Checks backend health status
+  Future<bool> checkHealth();
 }
 
-/// Simulated implementation of [AuthRepository] to show architectural compliance.
-/// Fully integrates [ApiClient] (showing interceptor configurations) and [SecureStorageService].
-class MockAuthRepository implements AuthRepository {
-  
+/// Real HTTP implementation of [AuthRepository] interacting with the ESCRA backend.
+class HttpAuthRepository implements AuthRepository {
+  final ApiClient _apiClient;
   final SecureStorageService _secureStorage;
 
-  MockAuthRepository(ApiClient _, this._secureStorage);
+  HttpAuthRepository(this._apiClient, this._secureStorage);
 
   @override
-  Future<UserModel> login(String email, String password) async {
-    // Simulate real network request timing
-    await Future.delayed(const Duration(milliseconds: 1000));
+  Future<UserModel> login(String phone, String password) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/login',
+        data: {
+          'phone': phone,
+          'password': password,
+        },
+        options: Options(extra: {'requiresAuth': false}),
+      );
 
-    if (password.length < 4) {
-      throw Exception('Incorrect login PIN. Must contain at least 4 digits.');
+      final data = response.data!;
+      final token = data['access_token'] as String;
+
+      // Save token first so that AuthInterceptor can use it to fetch balance
+      await _secureStorage.saveToken(token);
+
+      // Fetch wallet balance
+      int balanceKobo = 0;
+      try {
+        final balanceRes = await _apiClient.get<Map<String, dynamic>>('/wallets/balance');
+        balanceKobo = balanceRes.data!['balance_kobo'] as int? ?? 0;
+      } catch (_) {
+        // Fallback to 0 if balance fails
+      }
+
+      final userJson = data['user'] as Map<String, dynamic>;
+      final user = UserModel(
+        id: userJson['id'] as String,
+        name: '${userJson['first_name'] ?? ''} ${userJson['last_name'] ?? ''}'.trim(),
+        email: userJson['email'] as String? ?? '',
+        role: (userJson['role'] as String? ?? 'buyer').toLowerCase() == 'buyer'
+            ? UserRole.buyer
+            : UserRole.seller,
+        balanceKobo: balanceKobo,
+      );
+
+      await _secureStorage.saveUserData(jsonEncode(user.toJson()));
+      return user;
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Login failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
     }
-
-    // Dynamic role mapping based on credentials for interactive demo ease
-    final resolvedRole = email.contains('seller') ? UserRole.seller : UserRole.buyer;
-
-    final user = UserModel(
-      id: 'usr_89x201',
-      name: nameFromEmail(email),
-      email: email.toLowerCase(),
-      role: resolvedRole,
-      balanceKobo: resolvedRole == UserRole.buyer ? 75000000 : 0, // Seed ₦750,000 for buyer demo
-    );
-
-    // Save tokens and user details in device keychain
-    await _secureStorage.saveToken('jwt_bearer_escra_mock_token_9x123');
-    await _secureStorage.saveUserData(jsonEncode(user.toJson()));
-
-    return user;
   }
 
   @override
-  Future<UserModel> signUp(String name, String email, String password, UserRole role) async {
-    await Future.delayed(const Duration(milliseconds: 1000));
+  Future<UserModel> signUp({
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String password,
+    required String pin,
+    String? email,
+    required UserRole role,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/register',
+        data: {
+          'phone': phone,
+          'password': password,
+          'first_name': firstName,
+          'last_name': lastName,
+          'pin': pin,
+          'role': role == UserRole.seller ? 'seller' : 'buyer',
+          if (email != null && email.isNotEmpty) 'email': email,
+        },
+        options: Options(extra: {'requiresAuth': false}),
+      );
 
-    final user = UserModel(
-      id: 'usr_mock_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      email: email.toLowerCase(),
-      role: role,
-      balanceKobo: role == UserRole.buyer ? 50000000 : 0, // Seed ₦500,000 for buyer
-    );
+      final data = response.data!;
+      final token = data['access_token'] as String;
 
-    await _secureStorage.saveToken('jwt_bearer_escra_mock_token_signup_781');
-    await _secureStorage.saveUserData(jsonEncode(user.toJson()));
+      await _secureStorage.saveToken(token);
 
-    return user;
+      // Fetch wallet balance (0 for a new user, but good to check)
+      int balanceKobo = 0;
+      try {
+        final balanceRes = await _apiClient.get<Map<String, dynamic>>('/wallets/balance');
+        balanceKobo = balanceRes.data!['balance_kobo'] as int? ?? 0;
+      } catch (_) {
+        // Fallback to 0
+      }
+
+      final userJson = data['user'] as Map<String, dynamic>;
+      final user = UserModel(
+        id: userJson['id'] as String,
+        name: '${userJson['first_name'] ?? ''} ${userJson['last_name'] ?? ''}'.trim(),
+        email: userJson['email'] as String? ?? '',
+        role: role, // Use local requested role since backend might default/not return it
+        balanceKobo: balanceKobo,
+      );
+
+      await _secureStorage.saveUserData(jsonEncode(user.toJson()));
+      return user;
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Registration failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -98,9 +175,44 @@ class MockAuthRepository implements AuthRepository {
     await _secureStorage.saveUserData(jsonEncode(user.toJson()));
   }
 
-  /// Helper to convert email handles to high-contrast names
-  String nameFromEmail(String email) {
-    final handle = email.split('@').first;
-    return handle.substring(0, 1).toUpperCase() + handle.substring(1);
+  @override
+  Future<Map<String, dynamic>> getProfile() async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/users/profile');
+      final data = response.data!;
+      final user = UserModel(
+        id: data['id'] as String,
+        name: '${data['first_name'] ?? ''} ${data['last_name'] ?? ''}'.trim(),
+        email: data['email'] as String? ?? '',
+        role: (data['role'] as String? ?? 'buyer').toLowerCase() == 'buyer'
+            ? UserRole.buyer
+            : UserRole.seller,
+        balanceKobo: 0,
+      );
+      final currentCached = await getCachedUser();
+      if (currentCached != null) {
+        final updatedUser = user.copyWith(balanceKobo: currentCached.balanceKobo);
+        await updateCachedUser(updatedUser);
+      } else {
+        await updateCachedUser(user);
+      }
+      return data;
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Failed to load profile.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<bool> checkHealth() async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/health', options: Options(extra: {'requiresAuth': false}));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
   }
 }

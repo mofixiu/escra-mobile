@@ -1,17 +1,240 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../auth/domain/auth_controller.dart';
 import '../../data/models/order_model.dart';
 import '../../../auth/data/models/user_model.dart';
 import '../../domain/controllers/escrow_controller.dart';
 import 'order_detail_screen.dart';
+import 'buyer_order_details_screen.dart';
 import 'create_order_screen.dart';
 import '../../../../core/utils/escra_router.dart';
 
-/// Seller Dashboard & Order List
-class OrderListScreen extends StatelessWidget {
+/// Seller/Buyer Dashboard & Order List (Stateful for Reference Lookup)
+class OrderListScreen extends StatefulWidget {
   const OrderListScreen({super.key});
+
+  @override
+  State<OrderListScreen> createState() => _OrderListScreenState();
+}
+
+class _OrderListScreenState extends State<OrderListScreen> {
+  final _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _trackOrderPreview(BuildContext context, String reference, EscrowController escrowCtrl) async {
+    // Show a loading indicator dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.black)),
+    );
+
+    try {
+      final preview = await escrowCtrl.getPublicPreview(reference);
+      if (context.mounted) Navigator.pop(context); // Dismiss loading dialog
+
+      if (preview == null || preview.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Order reference not found.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Show bottom sheet with public order preview details
+      if (context.mounted) {
+        _showPublicPreviewBottomSheet(context, preview, escrowCtrl);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Dismiss loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showPublicPreviewBottomSheet(BuildContext context, Map<String, dynamic> preview, EscrowController escrowCtrl) {
+    final ref = preview['reference'] as String? ?? 'esc_unknown';
+    final title = preview['title'] as String? ?? 'Escrow Order';
+    final desc = preview['description'] as String? ?? '';
+    final amountKobo = preview['amount_kobo'] as int? ?? 0;
+    final seller = preview['seller_name'] as String? ?? 'Seller';
+    final status = preview['status'] as String? ?? 'CREATED';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Order Preview',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.black54, size: 20),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.black12, height: 1),
+              const SizedBox(height: 16),
+              
+              Text(
+                'Reference: #${ref.toUpperCase()}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                desc,
+                style: const TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.black12, height: 1),
+              const SizedBox(height: 16),
+              
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Seller:', style: TextStyle(color: Colors.black54)),
+                  Text(seller, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Amount:', style: TextStyle(color: Colors.black54)),
+                  Text(
+                    CurrencyFormatter.formatKobo(amountKobo),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Status:', style: TextStyle(color: Colors.black54)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: status.toUpperCase() == 'CREATED' ? Colors.orange.shade100 : Colors.black12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      status.toUpperCase() == 'CREATED' ? 'AWAITING PAYMENT' : status,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              
+              if (status.toUpperCase() == 'CREATED') ...[
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context); // close bottom sheet
+                    
+                    // Show loading overlay
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.black)),
+                    );
+
+                    debugPrint('[OrderListScreen] Starting checkout from preview for order: $ref');
+                    try {
+                      final checkoutUrl = await escrowCtrl.startCheckout(ref);
+                      if (context.mounted) Navigator.pop(context); // dismiss loading dialog
+                      
+                      if (checkoutUrl != null) {
+                        final uri = Uri.parse(checkoutUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                        } else {
+                          throw 'Could not launch payment URL';
+                        }
+                      } else {
+                        throw Exception(escrowCtrl.errorMessage ?? 'Checkout failed.');
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        if (Navigator.canPop(context)) Navigator.pop(context); // safety dismiss
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceAll('Exception: ', ''), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.payment, size: 18),
+                  label: const Text('PAY WITH CARD/BANK (KORA)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ] else ...[
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black12,
+                    foregroundColor: Colors.black87,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                  child: const Text('CLOSE', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +242,7 @@ class OrderListScreen extends StatelessWidget {
     final authCtrl = GetIt.I<AuthController>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7), // Light background
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
         backgroundColor: const Color(0xFFF7F7F7),
         elevation: 0,
@@ -61,7 +284,13 @@ class OrderListScreen extends StatelessWidget {
 
           return RefreshIndicator(
             onRefresh: () async {
-              await escrowCtrl.fetchOrders();
+              debugPrint('[OrderListScreen] Pull-to-refresh triggered. Fetching orders...');
+              try {
+                await escrowCtrl.fetchOrders();
+                debugPrint('[OrderListScreen] Orders fetched successfully. Count: ${escrowCtrl.orders.length}');
+              } catch (e) {
+                debugPrint('[OrderListScreen] Error fetching orders on refresh: $e');
+              }
             },
             color: Colors.white,
             backgroundColor: Colors.black,
@@ -79,6 +308,52 @@ class OrderListScreen extends StatelessWidget {
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Search / Track Reference Input
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.black12),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.search, color: Colors.black38),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchCtrl,
+                                  style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.bold),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Track Order Reference (e.g. ESC-...)',
+                                    hintStyle: TextStyle(color: Colors.black38, fontWeight: FontWeight.normal),
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () {
+                                  final ref = _searchCtrl.text.trim();
+                                  if (ref.isNotEmpty) {
+                                    _trackOrderPreview(context, ref, escrowCtrl);
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                child: const Text('TRACK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -137,7 +412,10 @@ class OrderListScreen extends StatelessWidget {
                                            EscraRouter.push(
                                              context,
                                              const CreateOrderScreen(),
-                                           ).then((_) => escrowCtrl.fetchOrders());
+                                           ).then((_) {
+                                              debugPrint('[OrderListScreen] Returned from CreateOrderScreen. Refreshing orders...');
+                                              escrowCtrl.fetchOrders();
+                                            });
                                         },
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.white,
@@ -223,7 +501,7 @@ class OrderListScreen extends StatelessWidget {
                         child: Center(child: CircularProgressIndicator(color: Colors.black)),
                       );
                     }
-
+ 
                     if (escrowCtrl.orders.isEmpty) {
                       return SliverFillRemaining(
                         hasScrollBody: false,
@@ -271,7 +549,7 @@ class OrderListScreen extends StatelessWidget {
                         ),
                       );
                     }
-
+ 
                     return SliverPadding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 120),
                       sliver: SliverList(
@@ -279,16 +557,21 @@ class OrderListScreen extends StatelessWidget {
                           (context, index) {
                             final order = escrowCtrl.orders[index];
                             final isMyBuyerOrder = order.buyerId == user?.id;
-                            return _OrderCard(
-                              order: order,
-                              isMyBuyerOrder: isMyBuyerOrder,
-                              onTap: () {
-                                 EscraRouter.push(
-                                   context,
-                                   OrderDetailScreen(order: order),
-                                 ).then((_) => escrowCtrl.fetchOrders());
-                              },
-                            );
+                             return _OrderCard(
+                               order: order,
+                               isMyBuyerOrder: isMyBuyerOrder,
+                               onTap: () {
+                                  EscraRouter.push(
+                                    context,
+                                    isMyBuyerOrder
+                                        ? BuyerOrderDetailsScreen(order: order)
+                                        : OrderDetailScreen(order: order),
+                                  ).then((_) {
+                                    debugPrint('[OrderListScreen] Returned from order details. Refreshing orders...');
+                                    escrowCtrl.fetchOrders();
+                                  });
+                                },
+                             );
                           },
                           childCount: escrowCtrl.orders.length,
                         ),
@@ -309,13 +592,13 @@ class _OrderCard extends StatelessWidget {
   final OrderModel order;
   final bool isMyBuyerOrder;
   final VoidCallback onTap;
-
+ 
   const _OrderCard({
     required this.order,
     required this.isMyBuyerOrder,
     required this.onTap,
   });
-
+ 
   @override
   Widget build(BuildContext context) {
     IconData getIcon(String title) {
@@ -325,7 +608,7 @@ class _OrderCard extends StatelessWidget {
       if (t.contains('ps5') || t.contains('game')) return Icons.sports_esports;
       return Icons.inventory_2_outlined;
     }
-
+ 
     Color getStatusColor() {
       switch (order.status) {
         case EscrowStatus.pendingPayment:
@@ -342,14 +625,14 @@ class _OrderCard extends StatelessWidget {
           return Colors.grey.shade200;
       }
     }
-
+ 
     Color getStatusTextColor() {
       if (order.status == EscrowStatus.delivered || order.status == EscrowStatus.completed) {
         return Colors.white;
       }
       return Colors.black;
     }
-
+ 
     String getStatusText() {
       switch (order.status) {
         case EscrowStatus.pendingPayment:
@@ -366,14 +649,14 @@ class _OrderCard extends StatelessWidget {
           return 'REFUNDED';
       }
     }
-
+ 
     IconData getStatusIcon() {
       if (order.status == EscrowStatus.delivered) return Icons.lock_outline;
       if (order.status == EscrowStatus.completed) return Icons.check;
       if (order.status == EscrowStatus.funded) return Icons.local_shipping_outlined;
       return Icons.info_outline;
     }
-
+ 
     return GestureDetector(
       onTap: onTap,
       child: Container(

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/high_contrast_button.dart';
+import '../../../wallet/data/repositories/wallet_repository.dart';
 import '../../data/models/merchant_profile_store.dart';
 
 /// Premium visual Payout Settings Screen for Sellers.
@@ -374,7 +376,12 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
   final _acctController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  String? _selectedBank;
+  List<Map<String, String>> _banks = [];
+  bool _isLoadingBanks = true;
+  String? _bankError;
+
+  String? _selectedBankCode;
+  String? _selectedBankName;
   bool _isResolving = false;
   String? _resolvedName;
 
@@ -382,6 +389,30 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
   void initState() {
     super.initState();
     _acctController.addListener(_onAccountNumberChanged);
+    _loadBanks();
+  }
+
+  Future<void> _loadBanks() async {
+    debugPrint('[PayoutSettingsScreen] Loading banks for linking settlement account...');
+    try {
+      final walletRepo = GetIt.I<WalletRepository>();
+      final list = await walletRepo.getSupportedBanks();
+      debugPrint('[PayoutSettingsScreen] Supported banks loaded successfully. Count: ${list.length}');
+      if (mounted) {
+        setState(() {
+          _banks = list;
+          _isLoadingBanks = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PayoutSettingsScreen] Error loading supported banks: $e');
+      if (mounted) {
+        setState(() {
+          _bankError = e.toString().replaceAll('Exception: ', '');
+          _isLoadingBanks = false;
+        });
+      }
+    }
   }
 
   @override
@@ -393,7 +424,7 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
 
   void _onAccountNumberChanged() {
     final text = _acctController.text.trim();
-    if (text.length == 10 && _selectedBank != null) {
+    if (text.length == 10 && _selectedBankCode != null) {
       _resolveAccountName();
     } else {
       if (_resolvedName != null) {
@@ -405,29 +436,53 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
   }
 
   Future<void> _resolveAccountName() async {
+    if (_selectedBankCode == null) return;
+    debugPrint('[PayoutSettingsScreen] Resolving settlement bank account. Bank Code: $_selectedBankCode, Account Number: ${_acctController.text.trim()}');
     setState(() {
       _isResolving = true;
       _resolvedName = null;
     });
 
-    // Simulate NIBSS bank resolver API delay
-    await Future.delayed(const Duration(milliseconds: 1200));
-
-    if (mounted) {
-      setState(() {
-        _isResolving = false;
-        _resolvedName = _profileStore.businessName.toUpperCase();
-      });
+    try {
+      final walletRepo = GetIt.I<WalletRepository>();
+      final result = await walletRepo.resolveBankAccount(
+        bankCode: _selectedBankCode!,
+        accountNumber: _acctController.text.trim(),
+      );
+      debugPrint('[PayoutSettingsScreen] Settlement bank account resolved. Account Name: ${result['account_name']}');
+      if (mounted) {
+        setState(() {
+          _isResolving = false;
+          _resolvedName = result['account_name'] as String?;
+        });
+      }
+    } catch (e) {
+      debugPrint('[PayoutSettingsScreen] Settlement bank account resolution failed: $e');
+      if (mounted) {
+        setState(() {
+          _isResolving = false;
+          _resolvedName = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().replaceAll('Exception: ', ''),
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
   void _handleSubmit() {
-    if (!_formKey.currentState!.validate() || _selectedBank == null || _resolvedName == null) {
+    if (!_formKey.currentState!.validate() || _selectedBankName == null || _resolvedName == null) {
       return;
     }
 
     _profileStore.updatePayoutSettings(
-      bank: _selectedBank!,
+      bank: _selectedBankName!,
       account: _acctController.text.trim(),
       name: _resolvedName!,
     );
@@ -491,47 +546,65 @@ class _LinkBankSheetState extends State<_LinkBankSheet> {
               ),
               const SizedBox(height: 24),
 
-              DropdownButtonFormField<String>(
-                initialValue: _selectedBank,
-                dropdownColor: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                menuMaxHeight: 300,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
-                style: const TextStyle(
-                  fontFamily: 'Montserrat',
-                  color: Colors.black87,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Select Bank',
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppColors.border, width: 1.0),
+              if (_isLoadingBanks)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(12.0),
+                    child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.black, width: 1.2),
+                )
+              else if (_bankError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    'Error loading banks: $_bankError',
+                    style: const TextStyle(color: AppColors.error, fontSize: 13, fontWeight: FontWeight.bold),
                   ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedBankCode,
+                  dropdownColor: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  menuMaxHeight: 300,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black54),
+                  style: const TextStyle(
+                    fontFamily: 'Montserrat',
+                    color: Colors.black87,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Select Bank',
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: AppColors.border, width: 1.0),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: Colors.black, width: 1.2),
+                    ),
+                  ),
+                  items: _banks.map((bank) {
+                    return DropdownMenuItem<String>(
+                      value: bank['code'],
+                      child: Text(bank['name']!),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    final selectedBank = _banks.firstWhere((b) => b['code'] == val);
+                    setState(() {
+                      _selectedBankCode = val;
+                      _selectedBankName = selectedBank['name'];
+                    });
+                    // Trigger resolution if account number was already typed
+                    if (_acctController.text.trim().length == 10) {
+                      _resolveAccountName();
+                    }
+                  },
+                  validator: (val) => val == null ? 'Please select a bank' : null,
                 ),
-                items: _profileStore.mockBanks.map((bank) {
-                  return DropdownMenuItem<String>(
-                    value: bank['name'],
-                    child: Text(bank['name']!),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _selectedBank = val;
-                  });
-                  // Trigger resolution if account number was already typed
-                  if (_acctController.text.trim().length == 10) {
-                    _resolveAccountName();
-                  }
-                },
-                validator: (val) => val == null ? 'Please select a bank' : null,
-              ),
               const SizedBox(height: 16),
 
               // Account Number Input

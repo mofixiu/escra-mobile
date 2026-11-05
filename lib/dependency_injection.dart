@@ -52,7 +52,7 @@ void setupDependencies() {
   // ─── Auth Feature ──────────────────────────────────────────────────────────
 
   sl.registerLazySingleton<AuthRepository>(
-    () => MockAuthRepository(sl<ApiClient>(), sl<SecureStorageService>()),
+    () => HttpAuthRepository(sl<ApiClient>(), sl<SecureStorageService>()),
   );
 
   sl.registerLazySingleton<AuthController>(
@@ -62,13 +62,13 @@ void setupDependencies() {
   // ─── Wallet Feature ────────────────────────────────────────────────────────
 
   sl.registerLazySingleton<WalletRepository>(
-    () => MockWalletRepository(sl<ApiClient>()),
+    () => HttpWalletRepository(sl<ApiClient>()),
   );
 
   // ─── Escrow Feature ────────────────────────────────────────────────────────
 
   sl.registerLazySingleton<EscrowRepository>(
-    () => MockEscrowRepository(sl<ApiClient>()),
+    () => HttpEscrowRepository(sl<ApiClient>()),
   );
 
   sl.registerLazySingleton<EscrowController>(

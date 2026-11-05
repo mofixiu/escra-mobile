@@ -24,7 +24,7 @@ class UserModel {
       id: json['id'] as String,
       name: json['name'] as String,
       email: json['email'] as String,
-      role: (json['role'] as String).toLowerCase() == 'buyer'
+      role: (json['role'] as String? ?? 'buyer').toLowerCase() == 'buyer'
           ? UserRole.buyer
           : UserRole.seller,
       balanceKobo: json['balance_kobo'] as int? ?? 0,

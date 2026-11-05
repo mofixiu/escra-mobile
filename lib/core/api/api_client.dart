@@ -14,9 +14,9 @@ class ApiClient {
     IdempotencyInterceptor idempotencyInterceptor,
   ) {
     dio.options = BaseOptions(
-      baseUrl: 'https://api.escra.app/v1', // Standardized API Gateway
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 15),
+      baseUrl: 'https://escra-payment-backend.onrender.com/api/v1',
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
       contentType: Headers.jsonContentType,
     );
 

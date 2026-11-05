@@ -31,7 +31,9 @@ class _OpenDisputeScreenState extends State<OpenDisputeScreen> {
   Future<void> _submitDispute() async {
     if (_selectedReason == null) return;
     
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.disputed);
+    debugPrint('[OpenDisputeScreen] Initiating dispute submission. Order ID: ${widget.order.id}, Reason: $_selectedReason');
+    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.disputed, disputeReason: _selectedReason);
+    debugPrint('[OpenDisputeScreen] Dispute submission completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
 
     Navigator.popUntil(context, (route) => route.isFirst);

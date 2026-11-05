@@ -1,6 +1,6 @@
+import 'package:dio/dio.dart';
 import '../../../../core/api/api_client.dart';
 import '../../../auth/data/models/user_model.dart';
-import '../../domain/escrow_state_machine.dart';
 import '../models/escrow_event_model.dart';
 import '../models/order_model.dart';
 
@@ -16,8 +16,10 @@ abstract class EscrowRepository {
     String sellerEmail,
     String description,
     String buyerId,
-    String buyerName,
-  );
+    String buyerName, {
+    String? salesChannel,
+    String? deliveryMode,
+  });
 
   /// Fetches chronological timeline updates for specific order agreements
   Future<List<EscrowEventModel>> getEvents(String orderId);
@@ -27,122 +29,203 @@ abstract class EscrowRepository {
     String orderId,
     EscrowStatus status,
     String actorId,
-    UserRole actorRole,
-  );
+    UserRole actorRole, {
+    String? pin,
+    String? deliveryCode,
+    String? disputeReason,
+  });
+
+  /// Marks order as shipped
+  Future<OrderModel> shipOrder(
+    String orderId, {
+    String? trackingReference,
+    String? deliveryProofUrl,
+    String? note,
+  });
+
+  /// Marks order as delivered
+  Future<OrderModel> markOrderDelivered(
+    String orderId, {
+    String? deliveryProofUrl,
+    String? note,
+  });
+
+  /// Releases escrow funds to seller
+  Future<OrderModel> releaseEscrow(String orderId);
+
+  /// Cancels an unfunded order
+  Future<OrderModel> cancelOrder(String orderId, {String? reason});
+
+  /// Refunds escrow back to buyer
+  Future<OrderModel> refundOrder(String orderId, {String? reason});
+
+  /// Starts checkout via Kora
+  Future<Map<String, dynamic>> startKoraCheckout(
+    String orderId, {
+    bool merchantBearsCost = false,
+  });
+
+  /// Fetches public escrow order preview
+  Future<Map<String, dynamic>> getPublicEscrowOrderPreview(String reference);
+
+  /// Fetches full order details
+  Future<OrderModel> getOrderDetails(String reference);
+
+  /// Admin resolve escrow dispute
+  Future<OrderModel> adminResolveDispute(
+    String orderId, {
+    required String action,
+    String? resolutionNote,
+  });
 }
 
-/// Simulated implementation of [EscrowRepository] holding data streams.
-class MockEscrowRepository implements EscrowRepository {
-  
-  final List<OrderModel> _mockOrders = [];
-  final List<EscrowEventModel> _mockEvents = [];
+/// Real HTTP implementation of [EscrowRepository] interacting with the ESCRA backend.
+class HttpEscrowRepository implements EscrowRepository {
+  final ApiClient _apiClient;
 
-  MockEscrowRepository(ApiClient _) {
-    // Seed high-fidelity sample agreements to make the app alive instantly
-    _mockOrders.addAll([
-      OrderModel(
-        id: 'esc_macbook_992',
-        title: 'M3 MacBook Pro Max 16GB',
-        amountKobo: 235000000, // ₦2,350,000.00
-        status: EscrowStatus.pendingPayment,
-        buyerId: 'usr_89x201', // Matching active demo Buyer ID
-        sellerId: 'usr_mac_shop_09',
-        buyerName: 'Buyer',
-        sellerName: 'MacBook Store NG',
-        description: 'Brand new space black Apple M3 MacBook Pro. Original box. Escrow held securely until buyer validates package.',
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      OrderModel(
-        id: 'esc_jacket_712',
-        title: 'Premium Leather Designer Jacket',
-        amountKobo: 12000000, // ₦120,000.00
-        status: EscrowStatus.funded,
-        buyerId: 'usr_buyer_obinna',
-        sellerId: 'usr_89x201', // Matching active demo Seller ID
-        buyerName: 'Obinna Okafor',
-        sellerName: 'Seller',
-        description: 'Custom brown leather jacket, size XL. Escrow funded, shipping from Lagos.',
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
-      ),
-    ]);
+  HttpEscrowRepository(this._apiClient);
 
-    // Seed corresponding milestones
-    _mockEvents.addAll([
-      EscrowEventModel(
-        id: 'ev_001',
-        orderId: 'esc_macbook_992',
-        title: 'Escrow Initiated',
-        message: 'Contract draft created for M3 MacBook Pro Max. Agreed amount: ₦2,350,000.00. Awaiting buyer funding.',
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      EscrowEventModel(
-        id: 'ev_002',
-        orderId: 'esc_jacket_712',
-        title: 'Escrow Initiated',
-        message: 'Contract draft created for Premium Leather Jacket. Agreed amount: ₦120,000.00.',
-        timestamp: DateTime.now().subtract(const Duration(days: 4)),
-      ),
-      EscrowEventModel(
-        id: 'ev_003',
-        orderId: 'esc_jacket_712',
-        title: 'Funds Secured in Escrow',
-        message: 'Buyer Obinna Okafor successfully deposited ₦120,000.00. Funds held in neutral collateral. Seller can ship.',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ]);
+  EscrowStatus _parseStatus(String status) {
+    switch (status.toUpperCase()) {
+      case 'CREATED':
+        return EscrowStatus.pendingPayment;
+      case 'FUNDED':
+      case 'SHIPPED':
+        return EscrowStatus.funded;
+      case 'DELIVERY_PENDING_CONFIRMATION':
+      case 'DELIVERED':
+        return EscrowStatus.delivered;
+      case 'RELEASED':
+      case 'COMPLETED':
+        return EscrowStatus.completed;
+      case 'DISPUTED':
+        return EscrowStatus.disputed;
+      case 'REFUNDED':
+      case 'CANCELLED':
+        return EscrowStatus.refunded;
+      default:
+        return EscrowStatus.pendingPayment;
+    }
   }
 
   @override
   Future<List<OrderModel>> getOrders() async {
-    await Future.delayed(const Duration(milliseconds: 700));
-    _mockOrders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return List.from(_mockOrders);
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/escrows/orders');
+      final data = response.data!;
+      final list = data['orders'] as List<dynamic>? ?? [];
+      return list.map((item) {
+        final map = item as Map<String, dynamic>;
+        return OrderModel(
+          id: map['reference'] as String? ?? map['id'] as String? ?? 'esc_unknown',
+          title: map['title'] as String? ?? 'Escrow Order',
+          amountKobo: map['amount_kobo'] as int? ?? 0,
+          status: _parseStatus(map['status'] as String? ?? 'CREATED'),
+          buyerId: map['buyer_id'] as String? ?? '',
+          sellerId: map['seller_id'] as String? ?? '',
+          buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+          sellerName: map['seller_name'] as String? ?? 'Seller',
+          description: map['description'] as String? ?? '',
+          createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+        );
+      }).toList();
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Failed to load escrow orders.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
   }
 
   @override
   Future<OrderModel> createOrder(
     String title,
     int amountKobo,
-    String sellerEmail,
+    String sellerEmail, // This is the buyer identifier (email/phone/ID)
     String description,
     String buyerId,
-    String buyerName,
-  ) async {
-    await Future.delayed(const Duration(milliseconds: 900));
+    String buyerName, {
+    String? salesChannel,
+    String? deliveryMode,
+  }) async {
+    try {
+      final Map<String, dynamic> body = {
+        'title': title,
+        'description': description,
+        'amount_kobo': amountKobo,
+        'currency': 'NGN',
+        'cross_border': false,
+      };
 
-    final order = OrderModel(
-      id: 'esc_${DateTime.now().millisecondsSinceEpoch}',
-      title: title,
-      amountKobo: amountKobo,
-      status: EscrowStatus.pendingPayment,
-      buyerId: buyerId,
-      sellerId: 'usr_seller_${DateTime.now().millisecondsSinceEpoch}',
-      buyerName: buyerName,
-      sellerName: sellerEmail.split('@').first.toUpperCase(),
-      description: description,
-      createdAt: DateTime.now(),
-    );
+      if (salesChannel != null) {
+        body['sales_channel'] = salesChannel;
+      }
+      if (deliveryMode != null) {
+        body['delivery_mode'] = deliveryMode;
+      }
 
-    _mockOrders.add(order);
+      final identifier = sellerEmail.trim();
+      if (identifier.contains('@')) {
+        body['buyer_email'] = identifier;
+      } else if (RegExp(r'^[0-9+\-\s]+$').hasMatch(identifier)) {
+        body['buyer_phone'] = identifier;
+      } else {
+        body['buyer_id'] = identifier;
+      }
 
-    // Initial event
-    _mockEvents.add(EscrowEventModel(
-      id: 'ev_${DateTime.now().millisecondsSinceEpoch}',
-      orderId: order.id,
-      title: 'Escrow Initiated',
-      message: 'Agreement established. Buyer: $buyerName, Seller: ${order.sellerName}. Amount: ${order.amountKobo}',
-      timestamp: DateTime.now(),
-    ));
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders',
+        data: body,
+      );
 
-    return order;
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? 'esc_unknown',
+        title: map['title'] as String? ?? title,
+        amountKobo: map['amount_kobo'] as int? ?? amountKobo,
+        status: _parseStatus(map['status'] as String? ?? 'CREATED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? description,
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Failed to create escrow order.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
   }
 
   @override
   Future<List<EscrowEventModel>> getEvents(String orderId) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    final matching = _mockEvents.where((e) => e.orderId == orderId).toList();
-    matching.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    return matching;
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/escrows/orders/$orderId');
+      final map = response.data!;
+      final list = map['events'] as List<dynamic>? ?? [];
+      return list.map((item) {
+        final eMap = item as Map<String, dynamic>;
+        final action = eMap['action'] as String? ?? 'Update';
+        final note = eMap['note'] as String? ?? '';
+        return EscrowEventModel(
+          id: eMap['created_at'] as String? ?? DateTime.now().toIso8601String(),
+          orderId: orderId,
+          title: action,
+          message: note.isNotEmpty ? note : action,
+          timestamp: DateTime.tryParse(eMap['created_at'] as String? ?? '') ?? DateTime.now(),
+        );
+      }).toList();
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Failed to load order milestones.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -150,47 +233,324 @@ class MockEscrowRepository implements EscrowRepository {
     String orderId,
     EscrowStatus status,
     String actorId,
-    UserRole actorRole,
-  ) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    final idx = _mockOrders.indexWhere((o) => o.id == orderId);
-    if (idx == -1) throw Exception('Escrow agreement details not found.');
+    UserRole actorRole, {
+    String? pin,
+    String? deliveryCode,
+    String? disputeReason,
+  }) async {
+    try {
+      Response<Map<String, dynamic>> response;
+      if (status == EscrowStatus.funded) {
+        response = await _apiClient.post<Map<String, dynamic>>(
+          '/escrows/orders/$orderId/fund',
+          data: {
+            'pin': pin ?? '1234',
+          },
+        );
+      } else if (status == EscrowStatus.completed) {
+        response = await _apiClient.post<Map<String, dynamic>>(
+          '/escrows/orders/$orderId/confirm-delivery',
+          data: {
+            if (deliveryCode != null && deliveryCode.isNotEmpty) 'delivery_code': deliveryCode,
+            if (pin != null && pin.isNotEmpty) 'pin': pin,
+          },
+        );
+      } else if (status == EscrowStatus.disputed) {
+        response = await _apiClient.post<Map<String, dynamic>>(
+          '/escrows/orders/$orderId/dispute',
+          data: {
+            'reason': disputeReason ?? 'Dispute opened from app',
+          },
+        );
+      } else {
+        throw Exception('Unsupported manual status transition.');
+      }
 
-    final oldOrder = _mockOrders[idx];
+      final map = response.data!;
+      final orderMap = (map['order'] as Map<String, dynamic>?) ?? map;
 
-    // Enforce business state machine
-    final newOrder = EscrowStateMachine.transition(oldOrder, status, actorId, actorRole);
-    _mockOrders[idx] = newOrder;
-
-    // Dynamically compose customized event logs
-    String evTitle = 'Escrow Updated';
-    String evMsg = 'Agreement transitioned to ${status.name}';
-
-    if (status == EscrowStatus.funded) {
-      evTitle = 'Funds Secured in Escrow';
-      evMsg = 'Buyer successfully deposited funds into neutral lock. Waiting for shipment.';
-    } else if (status == EscrowStatus.delivered) {
-      evTitle = 'Consignment Dispatched';
-      evMsg = 'Seller marked items as dispatched and delivered. Buyer verification countdown active.';
-    } else if (status == EscrowStatus.completed) {
-      evTitle = 'Funds Released to Seller';
-      evMsg = 'Buyer verified receipt and approved payout release. Agreement successfully closed.';
-    } else if (status == EscrowStatus.disputed) {
-      evTitle = 'Dispute Raised';
-      evMsg = 'Arbitration requested. Funds locked pending neutral settlement.';
-    } else if (status == EscrowStatus.refunded) {
-      evTitle = 'Escrow Refunded';
-      evMsg = 'Seller authorized return. Money returned to Buyer account wallet.';
+      return OrderModel(
+        id: orderMap['reference'] as String? ?? orderMap['id'] as String? ?? orderId,
+        title: orderMap['title'] as String? ?? 'Escrow Order',
+        amountKobo: orderMap['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(orderMap['status'] as String? ?? 'CREATED'),
+        buyerId: orderMap['buyer_id'] as String? ?? '',
+        sellerId: orderMap['seller_id'] as String? ?? '',
+        buyerName: orderMap['buyer_name'] as String? ?? orderMap['buyer_email'] as String? ?? orderMap['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: orderMap['seller_name'] as String? ?? 'Seller',
+        description: orderMap['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(orderMap['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Status update failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
     }
+  }
 
-    _mockEvents.add(EscrowEventModel(
-      id: 'ev_update_${DateTime.now().millisecondsSinceEpoch}',
-      orderId: orderId,
-      title: evTitle,
-      message: evMsg,
-      timestamp: DateTime.now(),
-    ));
+  @override
+  Future<OrderModel> shipOrder(
+    String orderId, {
+    String? trackingReference,
+    String? deliveryProofUrl,
+    String? note,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/ship',
+        data: {
+          if (trackingReference != null) 'tracking_reference': trackingReference,
+          if (deliveryProofUrl != null) 'delivery_proof_url': deliveryProofUrl,
+          if (note != null) 'note': note,
+        },
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'SHIPPED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Mark ship failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
 
-    return newOrder;
+  @override
+  Future<OrderModel> markOrderDelivered(
+    String orderId, {
+    String? deliveryProofUrl,
+    String? note,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/mark-delivered',
+        data: {
+          if (deliveryProofUrl != null) 'delivery_proof_url': deliveryProofUrl,
+          if (note != null) 'note': note,
+        },
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'DELIVERED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Mark delivered failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<OrderModel> releaseEscrow(String orderId) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/release',
+        data: {},
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'RELEASED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Release escrow failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<OrderModel> cancelOrder(String orderId, {String? reason}) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/cancel',
+        data: {
+          if (reason != null) 'reason': reason,
+        },
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'CANCELLED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Cancel order failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<OrderModel> refundOrder(String orderId, {String? reason}) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/refund',
+        data: {
+          if (reason != null) 'reason': reason,
+        },
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'REFUNDED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Refund order failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> startKoraCheckout(
+    String orderId, {
+    bool merchantBearsCost = false,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/escrows/orders/$orderId/checkout/kora',
+        data: {
+          'merchant_bears_cost': merchantBearsCost,
+        },
+      );
+      return response.data!;
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Kora checkout failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> getPublicEscrowOrderPreview(String reference) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/public/escrows/orders/$reference');
+      return response.data!;
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Public preview failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<OrderModel> getOrderDetails(String reference) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>('/escrows/orders/$reference');
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? reference,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'CREATED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Failed to load order details.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<OrderModel> adminResolveDispute(
+    String orderId, {
+    required String action,
+    String? resolutionNote,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/admin/escrows/orders/$orderId/resolve-dispute',
+        data: {
+          'action': action,
+          if (resolutionNote != null) 'resolution_note': resolutionNote,
+        },
+        options: Options(headers: {'X-Admin-Key': 'admin_key_goes_here'}),
+      );
+      final map = response.data!;
+      return OrderModel(
+        id: map['reference'] as String? ?? map['id'] as String? ?? orderId,
+        title: map['title'] as String? ?? 'Escrow Order',
+        amountKobo: map['amount_kobo'] as int? ?? 0,
+        status: _parseStatus(map['status'] as String? ?? 'RELEASED'),
+        buyerId: map['buyer_id'] as String? ?? '',
+        sellerId: map['seller_id'] as String? ?? '',
+        buyerName: map['buyer_name'] as String? ?? map['buyer_email'] as String? ?? map['buyer_phone'] as String? ?? 'Buyer',
+        sellerName: map['seller_name'] as String? ?? 'Seller',
+        description: map['description'] as String? ?? '',
+        createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['message'] ?? e.response?.data?['error'] ?? 'Dispute resolution failed.';
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
   }
 }

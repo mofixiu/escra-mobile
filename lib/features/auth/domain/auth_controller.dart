@@ -46,10 +46,38 @@ class AuthController extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
+    final stopwatch = Stopwatch()..start();
+
     _currentUser = await _authRepository.getCachedUser();
+
+    final elapsed = stopwatch.elapsedMilliseconds;
+    if (elapsed < 1500) {
+      await Future.delayed(Duration(milliseconds: 1500 - elapsed));
+    }
 
     _isLoading = false;
     notifyListeners();
+
+    if (_currentUser != null) {
+      _verifyTokenBackground();
+    }
+  }
+
+  /// Verifies token validity in the background
+  Future<void> _verifyTokenBackground() async {
+    try {
+      await _authRepository.getProfile();
+      final updatedUser = await _authRepository.getCachedUser();
+      if (updatedUser != null) {
+        _currentUser = updatedUser;
+        notifyListeners();
+      }
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('401') || errStr.contains('unauthorized') || errStr.contains('invalid token')) {
+        await logout();
+      }
+    }
   }
 
   /// Exposes standard interface to adjust active user balances securely
@@ -62,7 +90,7 @@ class AuthController extends ChangeNotifier {
   }
 
   /// Authenticates user session
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String phone, String password) async {
     if (isLockedOut) {
       _errorMessage = 'Locked. Try again in $_lockoutSecondsRemaining seconds.';
       notifyListeners();
@@ -74,7 +102,7 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentUser = await _authRepository.login(email, password);
+      _currentUser = await _authRepository.login(phone, password);
       _failedAttempts = 0;
       _isLoading = false;
       notifyListeners();
@@ -93,13 +121,29 @@ class AuthController extends ChangeNotifier {
   }
 
   /// Registers fresh sessions
-  Future<bool> signUp(String name, String email, String password, UserRole role) async {
+  Future<bool> signUp({
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String password,
+    required String pin,
+    String? email,
+    required UserRole role,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _currentUser = await _authRepository.signUp(name, email, password, role);
+      _currentUser = await _authRepository.signUp(
+        firstName: firstName,
+        lastName: lastName,
+        phone: phone,
+        password: password,
+        pin: pin,
+        email: email,
+        role: role,
+      );
       _isLoading = false;
       notifyListeners();
       return true;

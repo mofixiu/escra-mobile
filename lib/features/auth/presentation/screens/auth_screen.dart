@@ -61,39 +61,53 @@ class _AuthScreenState extends State<AuthScreen> {
     final authCtrl = GetIt.I<AuthController>();
     bool success;
 
+    debugPrint('[AuthScreen] Form submitted. isSignUp: $_isSignUp, selectedRole: $_selectedRole');
+
     if (_isSignUp) {
-      final fullName = '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'.trim();
-      
       if (_selectedRole == UserRole.seller) {
+        debugPrint('[AuthScreen] Redirecting to SellerOnboardingScreen for phone: ${_phoneController.text.trim()}');
         EscraRouter.push(
           context,
           SellerOnboardingScreen(
-            fullName: fullName,
+            firstName: _firstNameController.text.trim(),
+            lastName: _lastNameController.text.trim(),
+            phone: _phoneController.text.trim(),
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
+            pin: _transactionPinController.text.trim(),
             onAuthSuccess: widget.onAuthSuccess,
           ),
         );
         return;
       }
       
+      debugPrint('[AuthScreen] Initiating signUp for buyer phone: ${_phoneController.text.trim()}');
       success = await authCtrl.signUp(
-        fullName,
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
-        _selectedRole,
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
+        phone: _phoneController.text.trim(),
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+        pin: _transactionPinController.text.trim(),
+        role: _selectedRole,
       );
+      debugPrint('[AuthScreen] signUp completed. success: $success');
     } else {
+      final phone = _emailController.text.trim();
+      debugPrint('[AuthScreen] Initiating login for phone: $phone');
       success = await authCtrl.login(
-        _emailController.text.trim(),
+        phone,
         _passwordController.text.trim(),
       );
+      debugPrint('[AuthScreen] login completed. success: $success');
     }
 
     if (mounted) {
       if (success) {
+        debugPrint('[AuthScreen] Authentication success. Routing to app shell.');
         widget.onAuthSuccess();
       } else {
+        debugPrint('[AuthScreen] Authentication failed. Error: ${authCtrl.errorMessage}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -232,17 +246,21 @@ class _AuthScreenState extends State<AuthScreen> {
                               TextFormField(
                                 controller: _emailController,
                                 style: const TextStyle(color: Colors.black, fontSize: 15),
-                                keyboardType: TextInputType.emailAddress,
-                                decoration: const InputDecoration(
-                                  hintText: 'Email Address',
-                                  hintStyle: TextStyle(color: Colors.black38),
-                                  prefixIcon: Icon(Icons.email_outlined, size: 20, color: Colors.black54),
-                                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.black12)),
-                                  focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.black)),
+                                keyboardType: _isSignUp ? TextInputType.emailAddress : TextInputType.phone,
+                                decoration: InputDecoration(
+                                  hintText: _isSignUp ? 'Email Address' : 'Phone Number',
+                                  hintStyle: const TextStyle(color: Colors.black38),
+                                  prefixIcon: Icon(
+                                    _isSignUp ? Icons.email_outlined : Icons.phone_outlined,
+                                    size: 20,
+                                    color: Colors.black54,
+                                  ),
+                                  enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.black12)),
+                                  focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.black)),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.isEmpty) return 'Required';
-                                  if (!v.contains('@')) return 'Invalid email address';
+                                  if (_isSignUp && !v.contains('@')) return 'Invalid email address';
                                   return null;
                                 },
                               ),
@@ -259,8 +277,8 @@ class _AuthScreenState extends State<AuthScreen> {
                                   enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.black12)),
                                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.black)),
                                 ),
-                                validator: (v) => v == null || v.length < 4
-                                    ? 'PIN must be at least 4 digits'
+                                validator: (v) => v == null || v.length < 6
+                                    ? 'Password must be at least 6 characters'
                                     : null,
                               ),
                               if (_isSignUp) ...[
@@ -466,7 +484,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Text(
-                                'Mock Accounts:\n• buyer@escra.com (seeded with ₦750,000)\n• seller@escra.com (starts with ₦0)\nPIN / Password: 1234',
+                                'Securely authenticate using your phone and password.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 11,

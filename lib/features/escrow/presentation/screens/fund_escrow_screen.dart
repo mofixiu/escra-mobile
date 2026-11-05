@@ -29,8 +29,10 @@ class _FundEscrowScreenState extends State<FundEscrowScreen> {
   }
 
   Future<void> _submitFunding() async {
+    debugPrint('[FundEscrowScreen] Initiating funding for Order ID: ${widget.order.id}, Amount (Kobo): ${widget.order.amountKobo}');
     // In a real app, verify PIN securely
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.funded);
+    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.funded, pin: _enteredPin);
+    debugPrint('[FundEscrowScreen] Funding completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
     
     // Navigate back to dashboard and refresh, or show success

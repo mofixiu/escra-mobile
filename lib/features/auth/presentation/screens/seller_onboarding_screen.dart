@@ -9,16 +9,22 @@ import '../../domain/auth_controller.dart';
 
 /// State-of-the-art seller verification and document upload screen.
 class SellerOnboardingScreen extends StatefulWidget {
-  final String fullName;
+  final String firstName;
+  final String lastName;
+  final String phone;
   final String email;
   final String password;
+  final String pin;
   final VoidCallback onAuthSuccess;
 
   const SellerOnboardingScreen({
     super.key,
-    required this.fullName,
+    required this.firstName,
+    required this.lastName,
+    required this.phone,
     required this.email,
     required this.password,
+    required this.pin,
     required this.onAuthSuccess,
   });
 
@@ -42,7 +48,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
   void initState() {
     super.initState();
     // Default pre-fill business name based on owner name
-    _businessNameCtrl.text = '${widget.fullName} Enterprises';
+    _businessNameCtrl.text = '${widget.firstName} ${widget.lastName} Enterprises';
   }
 
   @override
@@ -95,16 +101,24 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
     final authCtrl = GetIt.I<AuthController>();
     final profileStore = MerchantProfileStore();
 
+    debugPrint('[SellerOnboardingScreen] Form validation and file upload complete. Initiating seller signUp. Business Name: ${_businessNameCtrl.text.trim()}, RC: ${_rcNumberCtrl.text.trim()}');
+
     // Call Sign Up
     final success = await authCtrl.signUp(
-      widget.fullName,
-      widget.email,
-      widget.password,
-      UserRole.seller,
+      firstName: widget.firstName,
+      lastName: widget.lastName,
+      phone: widget.phone,
+      email: widget.email,
+      password: widget.password,
+      pin: widget.pin,
+      role: UserRole.seller,
     );
+
+    debugPrint('[SellerOnboardingScreen] signUp completed. success: $success');
 
     if (mounted) {
       if (success) {
+        debugPrint('[SellerOnboardingScreen] Sign up success. Updating local merchant profile store and completing onboarding.');
         profileStore.updateBusinessDetails(
           name: _businessNameCtrl.text.trim(),
           type: 'Private Limited Company',
@@ -120,6 +134,7 @@ class _SellerOnboardingScreenState extends State<SellerOnboardingScreen> {
         Navigator.pop(context);
         widget.onAuthSuccess();
       } else {
+        debugPrint('[SellerOnboardingScreen] Sign up failed. Error: ${authCtrl.errorMessage}');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(authCtrl.errorMessage ?? 'Onboarding registration failed.', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),

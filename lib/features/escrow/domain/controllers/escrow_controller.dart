@@ -15,7 +15,29 @@ class EscrowController extends ChangeNotifier {
   String? _errorMessage;
 
   EscrowController(this._escrowRepository, this._authController) {
-    fetchOrders();
+    _authController.addListener(_onAuthChanged);
+    if (_authController.isAuthenticated) {
+      fetchOrders();
+    }
+  }
+
+  void _onAuthChanged() {
+    if (!_authController.isAuthenticated) {
+      // Clear cached orders list on logout to prevent state leakage
+      _orders = [];
+      _isLoading = false;
+      _errorMessage = null;
+      notifyListeners();
+    } else {
+      // Fetch orders immediately when a new user logs in
+      fetchOrders();
+    }
+  }
+
+  @override
+  void dispose() {
+    _authController.removeListener(_onAuthChanged);
+    super.dispose();
   }
 
   // Getters
@@ -45,6 +67,8 @@ class EscrowController extends ChangeNotifier {
     required int amountKobo,
     required String sellerEmail,
     required String description,
+    String? salesChannel,
+    String? deliveryMode,
   }) async {
     if (_authController.currentUser == null) return false;
 
@@ -61,6 +85,8 @@ class EscrowController extends ChangeNotifier {
         description,
         user.id,
         user.name,
+        salesChannel: salesChannel,
+        deliveryMode: deliveryMode,
       );
       await fetchOrders();
       return true;
@@ -73,7 +99,13 @@ class EscrowController extends ChangeNotifier {
   }
 
   /// Processes state transitions and manages accompanying wallet offsets
-  Future<bool> updateStatus(String orderId, EscrowStatus nextStatus) async {
+  Future<bool> updateStatus(
+    String orderId,
+    EscrowStatus nextStatus, {
+    String? pin,
+    String? deliveryCode,
+    String? disputeReason,
+  }) async {
     if (_authController.currentUser == null) return false;
     final user = _authController.currentUser!;
 
@@ -105,7 +137,118 @@ class EscrowController extends ChangeNotifier {
         }
       }
 
-      await _escrowRepository.updateOrderStatus(orderId, nextStatus, user.id, user.role);
+      await _escrowRepository.updateOrderStatus(
+        orderId,
+        nextStatus,
+        user.id,
+        user.role,
+        pin: pin,
+        deliveryCode: deliveryCode,
+        disputeReason: disputeReason,
+      );
+      await fetchOrders();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> shipOrder(
+    String orderId, {
+    String? trackingReference,
+    String? deliveryProofUrl,
+    String? note,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _escrowRepository.shipOrder(
+        orderId,
+        trackingReference: trackingReference,
+        deliveryProofUrl: deliveryProofUrl,
+        note: note,
+      );
+      await fetchOrders();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> markOrderDelivered(
+    String orderId, {
+    String? deliveryProofUrl,
+    String? note,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _escrowRepository.markOrderDelivered(
+        orderId,
+        deliveryProofUrl: deliveryProofUrl,
+        note: note,
+      );
+      await fetchOrders();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> releaseEscrow(String orderId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _escrowRepository.releaseEscrow(orderId);
+      await fetchOrders();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> cancelOrder(String orderId, {String? reason}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _escrowRepository.cancelOrder(orderId, reason: reason);
+      await fetchOrders();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> refundOrder(String orderId, {String? reason}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _escrowRepository.refundOrder(orderId, reason: reason);
       await fetchOrders();
       return true;
     } catch (e) {
@@ -120,4 +263,66 @@ class EscrowController extends ChangeNotifier {
   Future<List<EscrowEventModel>> fetchEvents(String orderId) async {
     return await _escrowRepository.getEvents(orderId);
   }
+
+  /// Fetch up-to-date details for a specific order reference
+  Future<OrderModel> fetchOrderDetails(String reference) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final order = await _escrowRepository.getOrderDetails(reference);
+      final idx = _orders.indexWhere((o) => o.id == order.id);
+      if (idx != -1) {
+        _orders[idx] = order;
+      } else {
+        _orders.add(order);
+      }
+      return order;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Start Kora checkout for escrow order
+  Future<String?> startCheckout(String orderId, {bool merchantBearsCost = false}) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await _escrowRepository.startKoraCheckout(orderId, merchantBearsCost: merchantBearsCost);
+      final checkoutUrl = res['checkout_url'] as String?;
+      return checkoutUrl;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetches public escrow order preview by reference
+  Future<Map<String, dynamic>?> getPublicPreview(String reference) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final res = await _escrowRepository.getPublicEscrowOrderPreview(reference);
+      return res;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }
+

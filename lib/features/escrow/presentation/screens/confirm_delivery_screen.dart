@@ -30,8 +30,10 @@ class _ConfirmDeliveryScreenState extends State<ConfirmDeliveryScreen> {
   }
 
   Future<void> _submitConfirmation() async {
+    debugPrint('[ConfirmDeliveryScreen] Initiating delivery confirmation. Order ID: ${widget.order.id}, Entered Code: $_enteredCode');
     // Escrow confirmation logic
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.completed);
+    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.completed, deliveryCode: _enteredCode);
+    debugPrint('[ConfirmDeliveryScreen] Delivery confirmation completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
 
     Navigator.popUntil(context, (route) => route.isFirst);
