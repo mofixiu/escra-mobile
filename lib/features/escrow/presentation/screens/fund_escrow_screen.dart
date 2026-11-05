@@ -30,16 +30,29 @@ class _FundEscrowScreenState extends State<FundEscrowScreen> {
 
   Future<void> _submitFunding() async {
     debugPrint('[FundEscrowScreen] Initiating funding for Order ID: ${widget.order.id}, Amount (Kobo): ${widget.order.amountKobo}');
-    // In a real app, verify PIN securely
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.funded, pin: _enteredPin);
-    debugPrint('[FundEscrowScreen] Funding completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
+    final ok = await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.funded, pin: _enteredPin);
+    debugPrint('[FundEscrowScreen] Funding completed. success: $ok, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
+    if (!ok) {
+      _showError(_escrowCtrl.errorMessage ?? 'Payment failed. Please try again.');
+      return;
+    }
     
     // Navigate back to dashboard and refresh, or show success
     Navigator.popUntil(context, (route) => route.isFirst);
     EscraRouter.push(
       context,
       OrderDetailScreen(order: widget.order.copyWith(status: EscrowStatus.funded)),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 

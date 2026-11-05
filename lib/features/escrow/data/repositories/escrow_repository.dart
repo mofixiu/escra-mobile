@@ -241,10 +241,13 @@ class HttpEscrowRepository implements EscrowRepository {
     try {
       Response<Map<String, dynamic>> response;
       if (status == EscrowStatus.funded) {
+        if (pin == null || pin.isEmpty) {
+          throw Exception('Enter your transaction PIN to fund this escrow.');
+        }
         response = await _apiClient.post<Map<String, dynamic>>(
           '/escrows/orders/$orderId/fund',
           data: {
-            'pin': pin ?? '1234',
+            'pin': pin,
           },
         );
       } else if (status == EscrowStatus.completed) {

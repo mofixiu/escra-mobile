@@ -32,14 +32,28 @@ class _OpenDisputeScreenState extends State<OpenDisputeScreen> {
     if (_selectedReason == null) return;
     
     debugPrint('[OpenDisputeScreen] Initiating dispute submission. Order ID: ${widget.order.id}, Reason: $_selectedReason');
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.disputed, disputeReason: _selectedReason);
-    debugPrint('[OpenDisputeScreen] Dispute submission completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
+    final ok = await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.disputed, disputeReason: _selectedReason);
+    debugPrint('[OpenDisputeScreen] Dispute submission completed. success: $ok, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
+    if (!ok) {
+      _showError(_escrowCtrl.errorMessage ?? 'Could not open the dispute. Please try again.');
+      return;
+    }
 
     Navigator.popUntil(context, (route) => route.isFirst);
     EscraRouter.push(
       context,
       BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.disputed)),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'interceptors/idempotency_interceptor.dart';
 
@@ -24,14 +25,16 @@ class ApiClient {
     dio.interceptors.addAll([
       authInterceptor,
       idempotencyInterceptor,
-      // Lightweight development logger
-      LogInterceptor(
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: false,
-        responseBody: true,
-        error: true,
-      ),
+      // Development logger: debug builds only, and never headers or bodies,
+      // which carry bearer tokens, passwords and PINs.
+      if (kDebugMode)
+        LogInterceptor(
+          requestHeader: false,
+          requestBody: false,
+          responseHeader: false,
+          responseBody: false,
+          error: true,
+        ),
     ]);
   }
 

@@ -506,10 +506,10 @@ class _WalletScreenState extends State<WalletScreen> {
                       controller: amountController,
                       style: const TextStyle(color: Colors.black, fontSize: 15),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: '0.00',
-                        prefixText: '₦ ',
-                        prefixStyle: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                        prefixText: currentMethod == 'quidax' ? '$selectedCrypto ' : '₦ ',
+                        prefixStyle: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                       ),
                     ),
                     const SizedBox(height: 28),
@@ -644,8 +644,9 @@ class _WalletScreenState extends State<WalletScreen> {
                     pin: pin,
                   );
                   debugPrint('[WalletScreen] Crypto withdrawal via Quidax succeeded.');
-                  final newBal = _authCtrl.currentUser!.balanceKobo - koboAmount;
-                  _authCtrl.updateBalance(newBal);
+                  // The amount is in crypto units, not naira, so don't subtract
+                  // it locally; read the balance the server settled on instead.
+                  await _refreshBalanceFromServer();
                   _showStatusSnackBar('Crypto withdrawal initiated!', isError: false);
                 }
                 _fetchHistory();
@@ -658,6 +659,16 @@ class _WalletScreenState extends State<WalletScreen> {
         );
       },
     );
+  }
+
+  Future<void> _refreshBalanceFromServer() async {
+    try {
+      final res = await _walletRepo.getWalletBalance();
+      final balanceKobo = res['balance_kobo'];
+      if (balanceKobo is int) _authCtrl.updateBalance(balanceKobo);
+    } catch (e) {
+      debugPrint('[WalletScreen] Balance refresh failed: $e');
+    }
   }
 
   void _showStatusSnackBar(String message, {required bool isError}) {

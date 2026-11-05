@@ -118,25 +118,12 @@ class EscrowController extends ChangeNotifier {
       if (oldIdx == -1) throw Exception('Order agreement details not found.');
       final oldOrder = _orders[oldIdx];
 
-      // Safe financial balance adjustments during state alterations
-      if (nextStatus == EscrowStatus.funded) {
-        if (user.balanceKobo < oldOrder.amountKobo) {
-          throw Exception('Insufficient balance. Fund your wallet before committing to this escrow.');
-        }
-        // Deduct from buyer's active balance
-        _authController.updateBalance(user.balanceKobo - oldOrder.amountKobo);
-      } else if (nextStatus == EscrowStatus.completed) {
-        // If the active logged-in user is the Seller, credit their balance
-        if (oldOrder.sellerId == user.id) {
-          _authController.updateBalance(user.balanceKobo + oldOrder.amountKobo);
-        }
-      } else if (nextStatus == EscrowStatus.refunded) {
-        // If the active logged-in user is the Buyer, return funds
-        if (oldOrder.buyerId == user.id) {
-          _authController.updateBalance(user.balanceKobo + oldOrder.amountKobo);
-        }
+      if (nextStatus == EscrowStatus.funded && user.balanceKobo < oldOrder.amountKobo) {
+        throw Exception('Insufficient balance. Fund your wallet before committing to this escrow.');
       }
 
+      // Call the server first; only move the local balance once it succeeds,
+      // so a failed payment never leaves the balance short.
       await _escrowRepository.updateOrderStatus(
         orderId,
         nextStatus,
@@ -146,6 +133,19 @@ class EscrowController extends ChangeNotifier {
         deliveryCode: deliveryCode,
         disputeReason: disputeReason,
       );
+
+      final balanceKobo = _authController.currentUser?.balanceKobo ?? user.balanceKobo;
+      if (nextStatus == EscrowStatus.funded) {
+        // Deduct from buyer's active balance
+        _authController.updateBalance(balanceKobo - oldOrder.amountKobo);
+      } else if (nextStatus == EscrowStatus.completed && oldOrder.sellerId == user.id) {
+        // The active user is the seller: credit their balance
+        _authController.updateBalance(balanceKobo + oldOrder.amountKobo);
+      } else if (nextStatus == EscrowStatus.refunded && oldOrder.buyerId == user.id) {
+        // The active user is the buyer: return funds
+        _authController.updateBalance(balanceKobo + oldOrder.amountKobo);
+      }
+
       await fetchOrders();
       return true;
     } catch (e) {

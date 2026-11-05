@@ -30,16 +30,30 @@ class _ConfirmDeliveryScreenState extends State<ConfirmDeliveryScreen> {
   }
 
   Future<void> _submitConfirmation() async {
-    debugPrint('[ConfirmDeliveryScreen] Initiating delivery confirmation. Order ID: ${widget.order.id}, Entered Code: $_enteredCode');
+    debugPrint('[ConfirmDeliveryScreen] Initiating delivery confirmation. Order ID: ${widget.order.id}');
     // Escrow confirmation logic
-    await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.completed, deliveryCode: _enteredCode);
-    debugPrint('[ConfirmDeliveryScreen] Delivery confirmation completed. success: ${_escrowCtrl.errorMessage == null}, Error: ${_escrowCtrl.errorMessage}');
+    final ok = await _escrowCtrl.updateStatus(widget.order.id, EscrowStatus.completed, deliveryCode: _enteredCode);
+    debugPrint('[ConfirmDeliveryScreen] Delivery confirmation completed. success: $ok, Error: ${_escrowCtrl.errorMessage}');
     if (!mounted) return;
+    if (!ok) {
+      _showError(_escrowCtrl.errorMessage ?? 'Could not confirm delivery. Please try again.');
+      return;
+    }
 
     Navigator.popUntil(context, (route) => route.isFirst);
     EscraRouter.push(
       context,
       BuyerOrderDetailsScreen(order: widget.order.copyWith(status: EscrowStatus.completed)),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 

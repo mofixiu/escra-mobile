@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
@@ -15,6 +16,12 @@ import 'features/wallet/presentation/screens/wallet_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // debugPrint still prints in release builds; silence it there so phone and
+  // account numbers never reach the device log.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
 
   // Lock to portrait-only for a clean banking-app feel
   SystemChrome.setPreferredOrientations([
